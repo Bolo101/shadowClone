@@ -239,7 +239,7 @@ def get_active_disk():
                         for parent in parent_devices:
                             if parent.strip():
                                 devices.add(get_base_disk(parent.strip()))
-                except (FileNotFoundError, CalledProcessError):
+                except (FileNotFoundError, subprocess.CalledProcessError):
                     # Fallback: extract device name from mapper path
                     # This is very basic but better than nothing
                     pass
