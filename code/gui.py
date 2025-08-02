@@ -29,6 +29,9 @@ class DiskClonerGUI:
         # Create the GUI elements
         self.create_widgets()
         
+        # Set up window close protocol
+        self.root.protocol("WM_DELETE_WINDOW", self.exit_application)
+        
         # Log the GUI initialization
         self.add_session_log("GUI initialized successfully")
         log_info("GUI initialized successfully")
@@ -88,7 +91,14 @@ class DiskClonerGUI:
                                       text="📋 Print Log File",
                                       command=self.generate_log_file_pdf,
                                       width=18)
-        self.file_pdf_btn.grid(row=0, column=1)
+        self.file_pdf_btn.grid(row=0, column=1, padx=(0, 5))
+        
+        # Exit button
+        self.exit_btn = ttk.Button(button_frame, 
+                                  text="❌ Exit",
+                                  command=self.exit_application,
+                                  width=12)
+        self.exit_btn.grid(row=0, column=2)
         
         # Add separator
         separator = ttk.Separator(self.root, orient='horizontal')
@@ -423,6 +433,35 @@ class DiskClonerGUI:
             log_warning("Stop requested by user")
             self.status_var.set("Stopping...")
     
+    def exit_application(self):
+        """Exit the application with confirmation"""
+        if self.operation_running:
+            result = messagebox.askyesno("Exit Confirmation", 
+                                       "⚠️ An operation is currently running.\n\n"
+                                       "Are you sure you want to exit?\n"
+                                       "This will stop the current operation.")
+            if result:
+                self.stop_requested = True
+                self.add_session_log("Application exit requested during operation", "WARNING")
+                log_warning("Application exit requested during operation")
+                # Give a moment for the operation to stop
+                self.root.after(1000, self._force_exit)
+            return
+        
+        # Normal exit confirmation
+        result = messagebox.askyesno("Exit Confirmation", 
+                                   "Are you sure you want to exit the Disk Cloner?")
+        if result:
+            self.add_session_log("Application exit requested by user")
+            log_info("Disk Cloner application terminated by user")
+            self.root.quit()
+            self.root.destroy()
+    
+    def _force_exit(self):
+        """Force exit after stopping operation"""
+        self.root.quit()
+        self.root.destroy()
+    
     def generate_session_pdf(self):
         """Generate PDF from current session logs"""
         try:
@@ -435,22 +474,10 @@ class DiskClonerGUI:
             # Generate PDF
             pdf_path = generate_session_pdf(self.session_logs)
             
-            # Show success message with option to open
-            result = messagebox.askyesno("PDF Generated", 
-                                       f"📄 Session log PDF generated successfully!\n\n"
-                                       f"Location: {pdf_path}\n\n"
-                                       f"Would you like to open the file location?")
-            
-            if result:
-                # Open file manager to the PDF location
-                try:
-                    subprocess.run(['xdg-open', os.path.dirname(pdf_path)])
-                except:
-                    # Fallback for different systems
-                    try:
-                        subprocess.run(['nautilus', os.path.dirname(pdf_path)])
-                    except:
-                        pass
+            # Show success message without option to open
+            messagebox.showinfo("PDF Generated", 
+                               f"📄 Session log PDF generated successfully!\n\n"
+                               f"Location: {pdf_path}")
             
             self.add_session_log(f"Session PDF generated: {pdf_path}", "SUCCESS")
             
@@ -478,22 +505,10 @@ class DiskClonerGUI:
             # Generate PDF
             pdf_path = generate_log_file_pdf()
             
-            # Show success message with option to open
-            result = messagebox.askyesno("PDF Generated", 
-                                       f"📋 Complete log file PDF generated successfully!\n\n"
-                                       f"Location: {pdf_path}\n\n"
-                                       f"Would you like to open the file location?")
-            
-            if result:
-                # Open file manager to the PDF location
-                try:
-                    subprocess.run(['xdg-open', os.path.dirname(pdf_path)])
-                except:
-                    # Fallback for different systems
-                    try:
-                        subprocess.run(['nautilus', os.path.dirname(pdf_path)])
-                    except:
-                        pass
+            # Show success message without option to open
+            messagebox.showinfo("PDF Generated", 
+                               f"📋 Complete log file PDF generated successfully!\n\n"
+                               f"Location: {pdf_path}")
             
             self.add_session_log(f"Complete log PDF generated: {pdf_path}", "SUCCESS")
             
