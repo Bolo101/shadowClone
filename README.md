@@ -4,13 +4,25 @@ Application de clonage bit-à-bit USB-vers-USB, pensée pour tourner en
 kiosque sur un PC standard sous Debian 13 (le support Raspberry Pi n'est
 plus nécessaire).
 
-## Architecture
+## Deux variantes du code
+
+| Dossier            | Utilisé pour                          | Panneau Administration |
+|---------------------|----------------------------------------|--------------------------|
+| `code/`             | Mode **Live** (clé USB / démo rapide)  | **Accès libre**, sans mot de passe |
+| `code_installer/`   | Mode **Installé** (borne définitive)   | **Protégé par mot de passe** (défini au premier accès) |
+
+Les deux dossiers contiennent exactement les mêmes fichiers ; seul
+`admin_interface.py` diffère (présence ou non de la vérification du mot de
+passe). Tout le reste — détection des ports, clonage, logs, PDF — est
+identique dans les deux variantes.
+
+## Architecture (fichiers communs aux deux dossiers)
 
 | Fichier                | Rôle |
 |-------------------------|------|
 | `main.py`               | Point d'entrée, vérifie les droits root, lance la GUI |
 | `gui_interface.py`      | Fenêtre principale : détection des disques, lancement du clonage, progression |
-| `admin_interface.py`    | Panneau admin protégé par mot de passe : config des ports, PDF, purge logs, arrêt système |
+| `admin_interface.py`    | Panneau admin : config des ports, PDF, purge logs, arrêt système (± mot de passe selon le dossier) |
 | `clone.py`              | Pilotage du sous-processus `dd`, calcul de progression, annulation, vérification |
 | `port_detector.py`      | Assistant de détection de port physique (débrancher/brancher) |
 | `config_manager.py`     | Configuration persistante (`/etc/disk_cloner/config.json`) |
@@ -19,12 +31,22 @@ plus nécessaire).
 
 ## Installation sur Debian 13
 
+Deux façons de déployer :
+
+1. **Via l'ISO dual-boot** (`forgeIsoCloner64.sh`) — solution recommandée pour
+   une vraie borne : boot Live (mode `code/`, admin libre) ou installation
+   définitive sur le disque interne (mode `code_installer/`, admin protégé).
+   Voir la section suivante.
+2. **Installation manuelle** d'une seule variante sur un Debian 13 existant,
+   via systemd (ci-dessous). Pour une borne définitive, utilisez plutôt le
+   contenu de `code_installer/` (admin protégé par mot de passe) :
+
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-tk udev util-linux coreutils
 
 sudo mkdir -p /opt/disk-cloner
-sudo cp *.py /opt/disk-cloner/
+sudo cp code_installer/*.py /opt/disk-cloner/
 sudo cp disk-cloner.service /etc/systemd/system/
 
 sudo systemctl daemon-reload
