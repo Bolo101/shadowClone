@@ -16,9 +16,15 @@ set -e
 # ── Variables ──────────────────────────────────────────────────────────────────
 ISO_NAME="$(pwd)/Cloneur-Disque-v1.0-64bits.iso"
 WORK_DIR="$(pwd)/debian-live-build"
-# Répertoire contenant main.py, gui_interface.py, admin_interface.py, clone.py,
-# port_detector.py, config_manager.py, log_handler.py, utils.py
-CODE_DIR="$(pwd)/../../code_installer"
+# code/           : mode LIVE (cle USB) — panneau Administration en ACCES LIBRE,
+#                   sans mot de passe (usage rapide sur poste de confiance).
+# code_installer/ : mode INSTALLE (borne definitive) — panneau Administration
+#                   PROTEGE PAR MOT DE PASSE (défini au premier accès admin).
+# Les deux dossiers contiennent le même jeu de fichiers (main.py, gui_interface.py,
+# clone.py, port_detector.py, config_manager.py, log_handler.py, utils.py) et ne
+# diffèrent que par admin_interface.py.
+CODE_DIR="$(pwd)/../../code"
+CODE_INSTALLER_DIR="$(pwd)/../../code_installer"
 
 # Paramètres de boot communs (réutilisés dans tous les menus)
 BOOT_PARAMS="boot=live components config hostname=disk-cloner username=user locales=fr_FR.UTF-8 keyboard-layouts=fr"
@@ -176,12 +182,8 @@ Section "Monitor"
 EndSection
 EOF
 
-# ── Code du cloneur ────────────────────────────────────────────────────────────
-# Un seul et même jeu de fichiers sert au mode Live et au mode Installé : le
-# panneau Administration (mot de passe, ports, PDF, purge, arrêt système) est
-# déjà intégré à l'application (admin_interface.py), inutile de dupliquer un
-# "code_installer" séparé comme dans l'ancien projet.
-echo "=== Copie du code du cloneur ==="
+# ── Code Live (sans mot de passe admin) ────────────────────────────────────────
+echo "=== Copie du code live (admin sans mot de passe) ==="
 mkdir -p config/includes.chroot/usr/local/bin/
 cp -r "${CODE_DIR}"/*.py config/includes.chroot/usr/local/bin/ 2>/dev/null || true
 chmod +x config/includes.chroot/usr/local/bin/*.py 2>/dev/null || true
@@ -191,6 +193,18 @@ cat << 'WRAPPER' > config/includes.chroot/usr/local/bin/disk-cloner
 exec python3 /usr/local/bin/main.py "$@"
 WRAPPER
 chmod +x config/includes.chroot/usr/local/bin/disk-cloner
+
+# ── Code Installer (admin protégé par mot de passe) ────────────────────────────
+echo "=== Copie du code installer (admin protégé par mot de passe) ==="
+mkdir -p config/includes.chroot/usr/local/bin_installer/
+cp -r "${CODE_INSTALLER_DIR}"/*.py config/includes.chroot/usr/local/bin_installer/ 2>/dev/null || true
+chmod +x config/includes.chroot/usr/local/bin_installer/*.py 2>/dev/null || true
+
+cat << 'WRAPPER' > config/includes.chroot/usr/local/bin_installer/disk-cloner-installer
+#!/bin/bash
+exec python3 /usr/local/bin_installer/main.py "$@"
+WRAPPER
+chmod +x config/includes.chroot/usr/local/bin_installer/disk-cloner-installer
 
 mkdir -p config/includes.chroot/var/log/disk_cloner/pdf/
 mkdir -p config/includes.chroot/etc/disk_cloner/
@@ -272,7 +286,7 @@ xset s noblank   2>/dev/null || true
 xfwm4 --compositor=off &
 WM_PID=$!
 sleep 1
-sudo /usr/local/bin/disk-cloner
+sudo /usr/local/bin_installer/disk-cloner-installer
 xterm -title "Session administrateur" -fa "Monospace" -fs 12 &
 kill "$WM_PID" 2>/dev/null || true
 EOF
