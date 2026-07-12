@@ -7,7 +7,7 @@ Fonctionnalites :
   * Generation PDF : rapport de session / logs complets
   * Purge des logs
   * Reglages de clonage (taille de bloc, verification post-clonage)
-  * Quitter / Redemarrer / Eteindre
+  * Redemarrer / Eteindre
 """
 from __future__ import annotations
 
@@ -261,8 +261,6 @@ class AdminPanel(tk.Toplevel):
                    command=self._reboot).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(sys_btns, text="Eteindre", style="AdminSys.TButton",
                    command=self._shutdown).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(sys_btns, text="Quitter l'application", style="AdminClose.TButton",
-                   command=self._quit_app).pack(side=tk.LEFT)
 
         close_row = ttk.Frame(body)
         close_row.pack(fill=tk.X, pady=(14, 0))
@@ -335,12 +333,6 @@ class AdminPanel(tk.Toplevel):
         if messagebox.askyesno("Eteindre", "Eteindre la machine maintenant ?", parent=self):
             log_application_exit("Extinction systeme (admin live)")
             subprocess.run(["systemctl", "poweroff"], check=False)
-
-    def _quit_app(self) -> None:
-        if messagebox.askyesno("Quitter", "Fermer completement l'application ?", parent=self):
-            log_application_exit("Bouton Quitter (admin live)")
-            self._parent.destroy()
-            sys.exit(0)
 
 
 def open_admin_panel(parent: tk.Widget, on_ports_changed: Optional[Callable[[], None]] = None) -> None:
