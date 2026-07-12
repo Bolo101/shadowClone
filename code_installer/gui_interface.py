@@ -58,9 +58,16 @@ class DiskCloneGUI:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Cloneur de disque - Borne autonome")
-        self.root.geometry("1200x760")
+        self.root.geometry("1200x760")  # taille de repli si le plein écran échoue
         self.root.minsize(1000, 680)
         self.root.configure(bg=self._BG)
+        self._fullscreen = True
+        self._apply_fullscreen(self._fullscreen)
+        self.root.bind('<F11>', self._toggle_fullscreen)
+        self.root.bind('<Escape>', lambda e: None)  # pas de sortie accidentelle du plein écran
+        # Certains gestionnaires de fenêtres ignorent -fullscreen tant que la
+        # fenêtre n'est pas encore mappée : on le réapplique juste après.
+        self.root.after(150, lambda: self._apply_fullscreen(self._fullscreen))
 
         if os.geteuid() != 0:
             messagebox.showerror("Erreur", "Ce programme doit être exécuté en tant que root.")
@@ -80,6 +87,24 @@ class DiskCloneGUI:
         self._build_ui()
         self._refresh_disks()
         self.root.after(self._REFRESH_INTERVAL_MS, self._auto_refresh)
+
+    # ── Plein écran (kiosque) ────────────────────────────────────────────
+    def _apply_fullscreen(self, enabled: bool) -> None:
+        try:
+            self.root.attributes('-fullscreen', enabled)
+        except tk.TclError:
+            # Gestionnaire de fenêtres minimal ne supportant pas l'attribut
+            # -fullscreen : on se rabat sur une géométrie couvrant l'écran.
+            if enabled:
+                w = self.root.winfo_screenwidth()
+                h = self.root.winfo_screenheight()
+                self.root.geometry(f"{w}x{h}+0+0")
+            else:
+                self.root.geometry("1200x760")
+
+    def _toggle_fullscreen(self, event=None) -> None:
+        self._fullscreen = not self._fullscreen
+        self._apply_fullscreen(self._fullscreen)
 
     # ── Thème ────────────────────────────────────────────────────────────
     def _setup_theme(self) -> None:
