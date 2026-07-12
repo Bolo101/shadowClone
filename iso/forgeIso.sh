@@ -23,8 +23,8 @@ WORK_DIR="$(pwd)/debian-live-build"
 # Les deux dossiers contiennent le même jeu de fichiers (main.py, gui_interface.py,
 # clone.py, port_detector.py, config_manager.py, log_handler.py, utils.py) et ne
 # diffèrent que par admin_interface.py.
-CODE_DIR="$(pwd)/../../code"
-CODE_INSTALLER_DIR="$(pwd)/../../code_installer"
+CODE_DIR="$(pwd)/../code"
+CODE_INSTALLER_DIR="$(pwd)/../code_installer"
 
 # Paramètres de boot communs (réutilisés dans tous les menus)
 BOOT_PARAMS="boot=live components config hostname=disk-cloner username=user locales=fr_FR.UTF-8 keyboard-layouts=fr"
