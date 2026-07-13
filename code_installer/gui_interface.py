@@ -9,6 +9,7 @@ et donne accès au panneau d'administration.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -165,6 +166,8 @@ class DiskCloneGUI:
         right_head.pack(side=tk.RIGHT)
         self._action_button(right_head, 'Administration', self._open_admin,
                             bg='#1e3a5f', hover_bg='#2a5080', accent=True).pack(side=tk.RIGHT)
+        self._action_button(right_head, 'Redémarrer', self._on_reboot_clicked,
+                            bg=self._SURFACE2, hover_bg=self._SURFACE3).pack(side=tk.RIGHT, padx=(0, 8))
 
         # Corps : deux cartes source/destination côte à côte
         disks_row = tk.Frame(shell, bg=self._BG)
@@ -461,6 +464,19 @@ class DiskCloneGUI:
         self._phase_var.set('Annulé')
         self._log("Clonage annulé.")
         self._reset_clone_state()
+
+    # ── Redémarrage ───────────────────────────────────────────────────────
+    def _on_reboot_clicked(self) -> None:
+        if self._cloning:
+            messagebox.showwarning(
+                'Clonage en cours',
+                "Impossible de redémarrer pendant un clonage. "
+                "Annulez le clonage en cours si nécessaire, puis réessayez.",
+            )
+            return
+        if messagebox.askyesno('Redémarrer', 'Redémarrer la borne maintenant ?'):
+            log_application_exit("Bouton Redémarrer (écran principal)")
+            subprocess.run(["systemctl", "reboot"], check=False)
 
     # ── Administration ────────────────────────────────────────────────────
     def _open_admin(self) -> None:
