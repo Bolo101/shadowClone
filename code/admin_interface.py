@@ -8,11 +8,13 @@ Fonctionnalites :
   * Purge des logs
   * Reglages de clonage (taille de bloc, verification post-clonage)
   * Redemarrer / Eteindre
+
+Cette fenetre s'ouvre en plein ecran (comme la fenetre principale) : touche
+F11 pour basculer, Echap pour fermer le panneau.
 """
 from __future__ import annotations
 
 import subprocess
-import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -30,18 +32,25 @@ from log_handler import (
 from port_detector import DetectionCancelled, DetectionTimeout, run_detection_wizard
 from utils import DiskInfo
 
-_BG          = "#f0f2f5"
+# ── Palette (alignee sur le theme sombre de gui_interface.py) ───────────────
+_BG          = "#0b1220"
+_SURFACE     = "#14233c"
+_SURFACE2    = "#1a2d4c"
+_SURFACE3    = "#21375c"
+_BORDER      = "#1c3556"
+_TEXT        = "#edf4ff"
+_TEXT_DIM    = "#9bb4d1"
 _HEADER_BG   = "#1e3a5f"
 _HEADER_FG   = "#ffffff"
-_LF_FG       = "#1e3a5f"
+_ACCENT2     = "#39a0ff"
 _BTN_ACTION  = "#2980b9"
-_BTN_ACT_A   = "#2471a3"
+_BTN_ACT_A   = "#3f9ade"
 _BTN_DANGER  = "#e74c3c"
-_BTN_DNG_A   = "#c0392b"
-_BTN_SYS     = "#5d6d7e"
-_BTN_SYS_A   = "#4d5d6e"
+_BTN_DNG_A   = "#ff6b5c"
+_BTN_SYS     = "#3d4f66"
+_BTN_SYS_A   = "#4d6280"
 _BTN_CLOSE   = "#27ae60"
-_BTN_CLOSE_A = "#1e8449"
+_BTN_CLOSE_A = "#31d67a"
 
 
 def _apply_admin_styles(root: tk.Widget) -> None:
@@ -51,13 +60,35 @@ def _apply_admin_styles(root: tk.Widget) -> None:
     except tk.TclError:
         pass
 
-    _FG = "#1a1a2e"
     style.configure("TFrame", background=_BG)
-    style.configure("TLabel", background=_BG, foreground=_FG, font=("Helvetica", 10))
-    style.configure("TEntry", fieldbackground="white", foreground=_FG,
-                    selectbackground="#2980b9", selectforeground="white",
-                    insertcolor=_FG, font=("Helvetica", 10))
-    style.configure("TCheckbutton", background=_BG, foreground=_FG, font=("Helvetica", 10))
+    style.configure("TLabel", background=_BG, foreground=_TEXT, font=("Helvetica", 10))
+    style.configure("TEntry", fieldbackground=_SURFACE2, foreground=_TEXT,
+                    selectbackground=_ACCENT2, selectforeground="white",
+                    insertcolor=_TEXT, bordercolor=_BORDER, font=("Helvetica", 10))
+    style.configure("TCheckbutton", background=_BG, foreground=_TEXT, font=("Helvetica", 10))
+    style.map("TCheckbutton", background=[("active", _BG)], foreground=[("active", _TEXT)])
+
+    style.configure("TCombobox", fieldbackground=_SURFACE2, background=_SURFACE2,
+                    foreground=_TEXT, arrowcolor=_TEXT, bordercolor=_BORDER)
+    style.map("TCombobox",
+              fieldbackground=[("readonly", _SURFACE2)],
+              foreground=[("readonly", _TEXT)],
+              background=[("readonly", _SURFACE2)])
+    root.option_add("*TCombobox*Listbox.background", _SURFACE2)
+    root.option_add("*TCombobox*Listbox.foreground", _TEXT)
+    root.option_add("*TCombobox*Listbox.selectBackground", _ACCENT2)
+    root.option_add("*TCombobox*Listbox.selectForeground", "white")
+
+    style.configure("TLabelframe", background=_BG, bordercolor=_BORDER,
+                    darkcolor=_BORDER, lightcolor=_BORDER, relief="groove")
+    style.configure("TLabelframe.Label", background=_BG, foreground=_ACCENT2,
+                    font=("Helvetica", 10, "bold"))
+
+    style.configure("TSeparator", background=_BORDER)
+
+    style.configure("TProgressbar", troughcolor=_SURFACE2, background=_ACCENT2,
+                    bordercolor=_SURFACE2, lightcolor=_ACCENT2, darkcolor=_ACCENT2)
+
     style.configure("AdminHeader.TFrame", background=_HEADER_BG)
     style.configure("AdminHeader.TLabel", background=_HEADER_BG, foreground=_HEADER_FG,
                     font=("Helvetica", 15, "bold"))
@@ -80,6 +111,7 @@ class PortDetectionDialog(tk.Toplevel):
     """
     Fenetre modale guidant l'utilisateur pas a pas dans la detection d'un
     port physique (debrancher -> brancher -> detection automatique).
+    Reste une petite boite centree (ce n'est pas la fenetre principale).
     """
 
     def __init__(self, parent: tk.Widget, port_label: str) -> None:
@@ -179,20 +211,29 @@ class AdminPanel(tk.Toplevel):
     def __init__(self, parent: tk.Widget, on_ports_changed: Optional[Callable[[], None]] = None) -> None:
         super().__init__(parent)
         self.title("Administration - Cloneur de disque (mode Live)")
-        self.geometry("620x640")
-        self.resizable(False, False)
         self.configure(bg=_BG)
+        self.resizable(True, True)
         self._parent = parent
         self._on_ports_changed = on_ports_changed
         _apply_admin_styles(self)
+
+        # ── Plein ecran (comme la fenetre principale) ────────────────────
+        self._fullscreen = True
+        self._apply_fullscreen(self._fullscreen)
+        self.bind('<F11>', self._toggle_fullscreen)
+        self.bind('<Escape>', lambda e: self.destroy())
+        self.after(150, lambda: self._apply_fullscreen(self._fullscreen))
 
         header = ttk.Frame(self, style="AdminHeader.TFrame", padding=(20, 14))
         header.pack(fill=tk.X)
         ttk.Label(header, text="Panneau d'administration - Mode Live (acces libre)",
                   style="AdminHeader.TLabel").pack()
 
-        body = ttk.Frame(self, padding=(20, 16))
-        body.pack(fill=tk.BOTH, expand=True)
+        # Zone de contenu centree, largeur confortable, sur fond plein ecran
+        outer = ttk.Frame(self)
+        outer.pack(fill=tk.BOTH, expand=True)
+        body = ttk.Frame(outer, padding=(20, 16))
+        body.place(relx=0.5, rely=0.0, anchor="n", width=680)
 
         # -- Ports --------------------------------------------------------
         ports_frame = ttk.LabelFrame(body, text="Ports physiques", padding=(14, 10))
@@ -205,7 +246,7 @@ class AdminPanel(tk.Toplevel):
         src_row = ttk.Frame(ports_frame)
         src_row.pack(fill=tk.X, pady=(0, 8))
         ttk.Label(src_row, text="Port SOURCE :", font=("Helvetica", 10, "bold")).pack(anchor="w")
-        ttk.Label(src_row, textvariable=self._source_status_var, wraplength=520).pack(anchor="w", pady=(2, 6))
+        ttk.Label(src_row, textvariable=self._source_status_var, wraplength=600).pack(anchor="w", pady=(2, 6))
         ttk.Button(src_row, text="Detecter / reconfigurer le port source",
                    style="AdminAction.TButton",
                    command=lambda: self._detect_port("source")).pack(anchor="w")
@@ -215,7 +256,7 @@ class AdminPanel(tk.Toplevel):
         dst_row = ttk.Frame(ports_frame)
         dst_row.pack(fill=tk.X)
         ttk.Label(dst_row, text="Port DESTINATION :", font=("Helvetica", 10, "bold")).pack(anchor="w")
-        ttk.Label(dst_row, textvariable=self._dest_status_var, wraplength=520).pack(anchor="w", pady=(2, 6))
+        ttk.Label(dst_row, textvariable=self._dest_status_var, wraplength=600).pack(anchor="w", pady=(2, 6))
         ttk.Button(dst_row, text="Detecter / reconfigurer le port destination",
                    style="AdminAction.TButton",
                    command=lambda: self._detect_port("dest")).pack(anchor="w")
@@ -264,7 +305,25 @@ class AdminPanel(tk.Toplevel):
 
         close_row = ttk.Frame(body)
         close_row.pack(fill=tk.X, pady=(14, 0))
+        ttk.Label(close_row, text="Echap ferme ce panneau  ·  F11 bascule le plein ecran",
+                  foreground=_TEXT_DIM).pack(side=tk.LEFT)
         ttk.Button(close_row, text="Fermer", command=self.destroy).pack(side=tk.RIGHT)
+
+    # ── Plein ecran ──────────────────────────────────────────────────────
+    def _apply_fullscreen(self, enabled: bool) -> None:
+        try:
+            self.attributes('-fullscreen', enabled)
+        except tk.TclError:
+            if enabled:
+                w = self.winfo_screenwidth()
+                h = self.winfo_screenheight()
+                self.geometry(f"{w}x{h}+0+0")
+            else:
+                self.geometry("620x680")
+
+    def _toggle_fullscreen(self, event=None) -> None:
+        self._fullscreen = not self._fullscreen
+        self._apply_fullscreen(self._fullscreen)
 
     # -- Ports --------------------------------------------------------------
     def _refresh_port_labels(self) -> None:
