@@ -219,10 +219,11 @@ class DiskCloneGUI:
         )
         self.cancel_btn.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Journal
-        log_card = self._card(shell, fill=tk.BOTH, expand=True)
+        # Journal (hauteur réduite et fixe : ne remplit plus tout l'espace
+        # restant de la fenêtre, ce qui le rendait disproportionné en plein écran)
+        log_card = self._card(shell, fill=tk.X, expand=False)
         self.log_text = tk.Text(
-            log_card, height=12, wrap=tk.WORD, bg='#0f1a2e', fg=self._TEXT,
+            log_card, height=6, wrap=tk.WORD, bg='#0f1a2e', fg=self._TEXT,
             insertbackground=self._TEXT, font=('Consolas', 9), bd=0,
             highlightthickness=0, padx=10, pady=8,
         )
