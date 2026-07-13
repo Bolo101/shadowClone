@@ -23,8 +23,8 @@ WORK_DIR="$(pwd)/debian-live-build"
 # Les deux dossiers contiennent le même jeu de fichiers (main.py, gui_interface.py,
 # clone.py, port_detector.py, config_manager.py, log_handler.py, utils.py) et ne
 # diffèrent que par admin_interface.py.
-CODE_DIR="$(pwd)/../code"
-CODE_INSTALLER_DIR="$(pwd)/../code_installer"
+CODE_DIR="$(pwd)/../../code"
+CODE_INSTALLER_DIR="$(pwd)/../../code_installer"
 
 # Paramètres de boot communs (réutilisés dans tous les menus)
 BOOT_PARAMS="boot=live components config hostname=disk-cloner username=user locales=fr_FR.UTF-8 keyboard-layouts=fr"
@@ -64,15 +64,19 @@ deb-src http://security.debian.org/debian-security trixie-security main contrib 
 EOF
 
 # ── Paquets ────────────────────────────────────────────────────────────────────
-# Liste resserrée sur les besoins réels du cloneur : plus de formatage/chiffrement
-# (ntfs-3g, dosfstools, cryptsetup) ni de partitionnement (parted), puisque le
-# cloneur clone des disques bruts (dd) et ne crée ni ne formate de partitions.
+# ntfs-3g et cryptsetup ne sont pas nécessaires (le cloneur clone des disques
+# bruts en dd, sans formater ni chiffrer). En revanche parted et dosfstools
+# SONT nécessaires : ce n'est pas l'application de clonage qui les utilise,
+# mais install-to-disk.sh (partitionnement/formatage du disque INTERNE de la
+# borne elle-même lors de l'installation définitive).
 echo "=== Déclaration des paquets ==="
 mkdir -p config/package-lists/
 cat << 'EOF' > config/package-lists/custom.list.chroot
 coreutils
 diffutils
 util-linux
+parted
+dosfstools
 udev
 pciutils
 usbutils
@@ -246,6 +250,27 @@ EOF
 
 # Script dispatcher : LightDM appelle toujours ce script.
 # Il lit /proc/cmdline pour choisir live ou installateur.
+cat << 'WRAPPEREOF' > config/includes.chroot/usr/local/bin/install-wrapper.sh
+#!/bin/bash
+# Encapsule install-to-disk.sh pour ne JAMAIS refermer silencieusement le
+# terminal : que l'installation réussisse ou échoue, un message clair reste
+# affiché et attend une touche avant de revenir à l'écran de démarrage.
+sudo /usr/local/bin/install-to-disk.sh
+ec=$?
+echo
+if [ "$ec" -eq 0 ]; then
+    echo "--- Script d'installation terminé normalement ---"
+    echo "(si le système ne redémarre pas de lui-même dans les secondes qui"
+    echo " suivent, l'installation a probablement été annulée par l'utilisateur)"
+else
+    echo "--- ÉCHEC DE L'INSTALLATION (code retour : $ec) ---"
+    echo "Aucun système n'a été installé/finalisé sur le disque cible."
+fi
+echo "Fermez cette fenêtre (ou appuyez sur Entrée) pour revenir à l'écran de démarrage."
+read -p "Appuyez sur Entrée pour continuer..." _
+WRAPPEREOF
+chmod +x config/includes.chroot/usr/local/bin/install-wrapper.sh
+
 cat << 'EOF' > config/includes.chroot/usr/local/bin/cloner-session-live.sh
 #!/bin/bash
 xset s off -dpms 2>/dev/null || true
@@ -256,7 +281,7 @@ sleep 1
 
 if grep -q "installer=1" /proc/cmdline; then
     xterm -title "Cloneur de disque - Installateur" -fa "Monospace" -fs 12 \
-          -e "sudo /usr/local/bin/install-to-disk.sh"
+          -e /usr/local/bin/install-wrapper.sh
 else
     sudo /usr/local/bin/disk-cloner
 fi
@@ -331,6 +356,30 @@ set -e
 
 TITLE="Cloneur de disque - Installation"
 TARGET_MNT="/mnt/target"
+
+# En cas d'échec d'une commande quelconque (parted, mkfs, rsync, chroot,
+# grub-install...), affiche clairement l'étape en cause au lieu de laisser
+# le script s'arrêter silencieusement (ce qui, auparavant, refermait juste
+# le terminal et ramenait à l'écran de connexion sans aucune explication,
+# en laissant croire à tort qu'une installation avait eu lieu).
+_on_error() {
+    local exit_code=$?
+    local failed_cmd="$BASH_COMMAND"
+    whiptail --title "$TITLE" --msgbox \
+"ÉCHEC DE L'INSTALLATION
+
+Commande en échec :
+  $failed_cmd
+
+Code de retour : $exit_code
+
+AUCUN système n'a été installé sur le disque cible (ou l'installation
+est incomplète) : ne redémarrez pas en pensant que la borne est prête,
+recommencez l'installation. Fermez cette fenêtre pour revenir au menu." \
+18 76
+    exit "$exit_code"
+}
+trap _on_error ERR
 
 part() {
     case "$1" in
