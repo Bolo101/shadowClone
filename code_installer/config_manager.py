@@ -2,34 +2,41 @@
 config_manager.py – Configuration persistante du cloneur de disque.
 
 Stocke notamment :
-  * le port physique (identifiant udev ID_PATH) affecté a la source
-  * le port physique affecte a la destination
-  * le hash du mot de passe administrateur
-  * des parametres de clonage (taille de bloc, verification post-clonage...)
+* le port physique (identifiant udev ID_PATH) affecté à la source
+* le port physique affecté à la destination
+* des paramètres de clonage (taille de bloc, vérification post-clonage)
 
-Fichier de configuration : /etc/disk_cloner/config.json
+Le mot de passe administrateur est stocké séparément dans
+/etc/disk_cloner/admin.cred via SecureCredentialStore.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import secrets
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+from secure_credentials import SecureCredentialStore
 
 CONFIG_DIR = "/etc/disk_cloner"
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
+ADMIN_CRED_FILE = os.path.join(CONFIG_DIR, "admin.cred")
+
+DEFAULT_ADMIN_PASSWORD = "0000"
+MIN_ADMIN_PASSWORD_LENGTH = 4
 
 _DEFAULT_CONFIG: Dict[str, Any] = {
     "source_id_path": None,
-    "source_label": None,       # dernier modele/serie vus sur ce port (informatif)
+    "source_label": None,
     "dest_id_path": None,
     "dest_label": None,
-    "admin_password_hash": None,
-    "admin_password_salt": None,
     "block_size": "4M",
     "verify_after_clone": False,
 }
+
+_store = SecureCredentialStore(
+    path=ADMIN_CRED_FILE,
+    default_password=DEFAULT_ADMIN_PASSWORD,
+)
 
 
 def _ensure_config_dir() -> None:
@@ -41,22 +48,35 @@ def load_config() -> Dict[str, Any]:
     if not os.path.isfile(CONFIG_FILE):
         save_config(_DEFAULT_CONFIG.copy())
         return _DEFAULT_CONFIG.copy()
+
     try:
-        with open(CONFIG_FILE, "r") as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
     except (json.JSONDecodeError, OSError):
         data = {}
+
     merged = _DEFAULT_CONFIG.copy()
     merged.update(data)
+
+    # Nettoyage silencieux d'anciens champs de mot de passe si présents
+    merged.pop("admin_password_hash", None)
+    merged.pop("admin_password_salt", None)
     return merged
 
 
 def save_config(config: Dict[str, Any]) -> None:
     _ensure_config_dir()
+
+    clean_config = dict(config)
+    clean_config.pop("admin_password_hash", None)
+    clean_config.pop("admin_password_salt", None)
+
     tmp_path = CONFIG_FILE + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(clean_config, f, indent=2, ensure_ascii=False)
+
     os.replace(tmp_path, CONFIG_FILE)
+
     try:
         os.chmod(CONFIG_FILE, 0o640)
     except OSError:
@@ -70,6 +90,7 @@ def _update(**kwargs) -> None:
 
 
 # -- Ports source / destination ---------------------------------------------
+
 def get_source_id_path() -> Optional[str]:
     return load_config().get("source_id_path")
 
@@ -91,7 +112,8 @@ def ports_configured() -> bool:
     return bool(cfg.get("source_id_path")) and bool(cfg.get("dest_id_path"))
 
 
-# -- Parametres de clonage ----------------------------------------------------
+# -- Paramètres de clonage --------------------------------------------------
+
 def get_block_size() -> str:
     return load_config().get("block_size", "4M")
 
@@ -108,32 +130,40 @@ def set_verify_after_clone(value: bool) -> None:
     _update(verify_after_clone=bool(value))
 
 
-# -- Mot de passe administrateur --------------------------------------------
-def _hash_password(password: str, salt: str) -> str:
-    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
-
+# -- Mot de passe administrateur -------------------------------------------
 
 def is_password_set() -> bool:
-    cfg = load_config()
-    return bool(cfg.get("admin_password_hash"))
+    return os.path.isfile(ADMIN_CRED_FILE)
+
+
+def is_default_password() -> bool:
+    return _store.is_default_password(DEFAULT_ADMIN_PASSWORD)
 
 
 def set_password(password: str) -> None:
-    salt = secrets.token_hex(16)
-    _update(admin_password_salt=salt, admin_password_hash=_hash_password(password, salt))
+    if len(password) < MIN_ADMIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Le mot de passe doit comporter au moins {MIN_ADMIN_PASSWORD_LENGTH} caractères."
+        )
+
+    ok, message = _store.force_set_password(password)
+    if not ok:
+        raise ValueError(message)
 
 
 def verify_password(password: str) -> bool:
-    cfg = load_config()
-    salt = cfg.get("admin_password_salt")
-    stored_hash = cfg.get("admin_password_hash")
-    if not salt or not stored_hash:
-        return False
-    return secrets.compare_digest(_hash_password(password, salt), stored_hash)
+    ok, _wait = _store.verify(password)
+    return ok
+
+
+def verify_password_with_wait(password: str) -> Tuple[bool, int]:
+    return _store.verify(password)
 
 
 def change_password(old_password: str, new_password: str) -> bool:
-    if not verify_password(old_password):
-        return False
-    set_password(new_password)
-    return True
+    ok, _message = _store.change_password(old_password, new_password)
+    return ok
+
+
+def change_password_with_message(old_password: str, new_password: str) -> Tuple[bool, str]:
+    return _store.change_password(old_password, new_password)
