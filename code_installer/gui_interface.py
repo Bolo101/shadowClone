@@ -124,7 +124,7 @@ class DiskCloneGUI:
         outer.pack(**pack_kw)
         inner = tk.Frame(outer, bg=self._SURFACE, padx=1, pady=1)
         inner.pack(fill=tk.BOTH, expand=True)
-        content = tk.Frame(inner, bg=self._SURFACE, padx=14, pady=12)
+        content = tk.Frame(inner, bg=self._SURFACE, padx=22, pady=18)
         content.pack(fill=tk.BOTH, expand=True)
         return content
 
@@ -169,12 +169,14 @@ class DiskCloneGUI:
         self._action_button(right_head, 'Redémarrer', self._on_reboot_clicked,
                             bg=self._SURFACE2, hover_bg=self._SURFACE3).pack(side=tk.RIGHT, padx=(0, 8))
 
-        # Corps : deux cartes source/destination côte à côte
+        # Corps : deux cartes source/destination côte à côte, qui occupent
+        # désormais une bonne partie de l'espace vertical disponible plutôt
+        # que de se limiter à leur contenu minimal.
         disks_row = tk.Frame(shell, bg=self._BG)
-        disks_row.pack(fill=tk.X, pady=(0, 10))
+        disks_row.pack(fill=tk.BOTH, expand=True, pady=(0, 14))
 
-        self.source_card = self._card(disks_row, side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
-        self.dest_card = self._card(disks_row, side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(6, 0))
+        self.source_card = self._card(disks_row, side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 7))
+        self.dest_card = self._card(disks_row, side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(7, 0))
 
         self._source_widgets = self._build_disk_panel(self.source_card, 'SOURCE')
         self._dest_widgets = self._build_disk_panel(self.dest_card, 'DESTINATION')
@@ -182,10 +184,10 @@ class DiskCloneGUI:
         # Avertissement destructif
         self.warning_var = tk.StringVar(value='⚠ Le clonage écrase intégralement le disque de destination.')
         tk.Label(shell, textvariable=self.warning_var, bg=self._BG, fg=self._DANGER,
-                 font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 8))
+                 font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(0, 10))
 
         # Zone de progression
-        progress_card = self._card(shell, fill=tk.X, pady=(0, 10))
+        progress_card = self._card(shell, fill=tk.X, pady=(0, 14))
         top_row = tk.Frame(progress_card, bg=self._SURFACE)
         top_row.pack(fill=tk.X)
         self._phase_var = tk.StringVar(value='En attente')
@@ -210,7 +212,7 @@ class DiskCloneGUI:
 
         # Boutons d'action
         btn_row = tk.Frame(shell, bg=self._BG)
-        btn_row.pack(fill=tk.X, pady=(0, 10))
+        btn_row.pack(fill=tk.X, pady=(0, 14))
         self.start_btn = self._action_button(
             btn_row, 'Démarrer le clonage', self._on_start_clicked,
             bg=self._ACCENT, hover_bg=self._ACCENT2, accent=True,
@@ -222,38 +224,51 @@ class DiskCloneGUI:
         )
         self.cancel_btn.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Journal (hauteur réduite et fixe : ne remplit plus tout l'espace
-        # restant de la fenêtre, ce qui le rendait disproportionné en plein écran)
-        log_card = self._card(shell, fill=tk.X, expand=False)
+        # Journal : partage désormais l'espace vertical restant avec les
+        # cartes disques ci-dessus, au lieu d'être cantonné à quelques
+        # lignes fixes en bas d'un grand vide.
+        log_card = self._card(shell, fill=tk.BOTH, expand=True)
+        log_title = tk.Label(log_card, text='Journal d\'activité', bg=self._SURFACE,
+                             fg=self._TEXT_DIM, font=('Segoe UI', 9, 'bold'))
+        log_title.pack(anchor='w', pady=(0, 6))
+        log_body = tk.Frame(log_card, bg=self._SURFACE)
+        log_body.pack(fill=tk.BOTH, expand=True)
         self.log_text = tk.Text(
-            log_card, height=6, wrap=tk.WORD, bg='#0f1a2e', fg=self._TEXT,
-            insertbackground=self._TEXT, font=('Consolas', 9), bd=0,
-            highlightthickness=0, padx=10, pady=8,
+            log_body, height=10, wrap=tk.WORD, bg='#0f1a2e', fg=self._TEXT,
+            insertbackground=self._TEXT, font=('Consolas', 10), bd=0,
+            highlightthickness=0, padx=12, pady=10,
         )
-        log_sb = ttk.Scrollbar(log_card, command=self.log_text.yview)
+        log_sb = ttk.Scrollbar(log_body, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_sb.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         log_sb.pack(side=tk.RIGHT, fill=tk.Y)
 
     def _build_disk_panel(self, parent, title: str) -> dict:
-        tk.Label(parent, text=title, bg=self._SURFACE, fg=self._ACCENT2,
-                 font=('Segoe UI', 10, 'bold')).pack(anchor='w')
-        status_dot = tk.Label(parent, text='●', bg=self._SURFACE, fg=self._DANGER,
-                              font=('Segoe UI', 12))
+        # Le contenu est regroupé dans un bloc centré verticalement dans la
+        # carte (qui, elle, occupe toute la hauteur disponible) : la carte
+        # a de la place, mais le texte reste groupé et lisible plutôt que
+        # collé en haut avec un grand vide en dessous.
+        content = tk.Frame(parent, bg=self._SURFACE)
+        content.pack(expand=True, fill=tk.X, anchor='center')
+
+        tk.Label(content, text=title, bg=self._SURFACE, fg=self._ACCENT2,
+                 font=('Segoe UI', 13, 'bold')).pack(anchor='w')
+        status_dot = tk.Label(content, text='●', bg=self._SURFACE, fg=self._DANGER,
+                              font=('Segoe UI', 20))
         model_var = tk.StringVar(value='Aucun disque détecté')
         info_var = tk.StringVar(value='')
         port_var = tk.StringVar(value='')
 
-        row = tk.Frame(parent, bg=self._SURFACE)
-        row.pack(fill=tk.X, pady=(6, 0))
+        row = tk.Frame(content, bg=self._SURFACE)
+        row.pack(fill=tk.X, pady=(14, 0))
         status_dot.pack(in_=row, side=tk.LEFT)
         tk.Label(row, textvariable=model_var, bg=self._SURFACE, fg=self._TEXT,
-                 font=('Segoe UI', 11, 'bold')).pack(side=tk.LEFT, padx=(6, 0))
+                 font=('Segoe UI', 16, 'bold')).pack(side=tk.LEFT, padx=(10, 0))
 
-        tk.Label(parent, textvariable=info_var, bg=self._SURFACE, fg=self._TEXT_DIM,
-                 font=('Segoe UI', 9)).pack(anchor='w', pady=(4, 0))
-        tk.Label(parent, textvariable=port_var, bg=self._SURFACE, fg=self._TEXT_FAINT,
-                 font=('Segoe UI', 8)).pack(anchor='w', pady=(2, 0))
+        tk.Label(content, textvariable=info_var, bg=self._SURFACE, fg=self._TEXT_DIM,
+                 font=('Segoe UI', 11), wraplength=420, justify='left').pack(anchor='w', pady=(12, 0))
+        tk.Label(content, textvariable=port_var, bg=self._SURFACE, fg=self._TEXT_FAINT,
+                 font=('Segoe UI', 10), wraplength=420, justify='left').pack(anchor='w', pady=(6, 0))
 
         return {
             'status_dot': status_dot,
