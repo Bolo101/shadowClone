@@ -444,25 +444,48 @@ class AdminPanel(tk.Toplevel):
     # ── Sécurité ─────────────────────────────────────────────────────────
     def _change_password(self) -> None:
         if config_manager.is_password_set():
-            old = simpledialog.askstring("Ancien mot de passe", "Mot de passe actuel :",
-                                          show="•", parent=self)
+            old = simpledialog.askstring(
+                "Ancien mot de passe",
+                "Mot de passe actuel :",
+                show="•",
+                parent=self,
+            )
             if old is None:
                 return
-            if not config_manager.verify_password(old):
-                messagebox.showerror("Erreur", "Mot de passe incorrect.", parent=self)
-                return
+        else:
+            old = ""
 
-        new = simpledialog.askstring("Nouveau mot de passe", "Nouveau mot de passe :",
-                                      show="•", parent=self)
+        new = simpledialog.askstring(
+            "Nouveau mot de passe",
+            "Nouveau mot de passe :",
+            show="•",
+            parent=self,
+        )
         if not new:
             return
-        confirm = simpledialog.askstring("Confirmation", "Confirmez le nouveau mot de passe :",
-                                          show="•", parent=self)
+
+        confirm = simpledialog.askstring(
+            "Confirmation",
+            "Confirmez le nouveau mot de passe :",
+            show="•",
+            parent=self,
+        )
         if new != confirm:
             messagebox.showerror("Erreur", "Les mots de passe ne correspondent pas.", parent=self)
             return
 
-        config_manager.set_password(new)
+        if config_manager.is_password_set():
+            ok, message = config_manager.change_password_with_message(old, new)
+            if not ok:
+                messagebox.showerror("Erreur", message, parent=self)
+                return
+        else:
+            try:
+                config_manager.set_password(new)
+            except ValueError as exc:
+                messagebox.showerror("Erreur", str(exc), parent=self)
+                return
+
         messagebox.showinfo("Succès", "Mot de passe mis à jour.", parent=self)
 
     # ── Système ──────────────────────────────────────────────────────────
@@ -482,7 +505,6 @@ class AdminPanel(tk.Toplevel):
             self._parent.destroy()
             sys.exit(0)
 
-
 def open_admin_panel(parent: tk.Widget, on_ports_changed: Optional[Callable[[], None]] = None) -> None:
     """Point d'entrée : demande le mot de passe puis ouvre le panneau si valide."""
     if not config_manager.is_password_set():
@@ -490,19 +512,41 @@ def open_admin_panel(parent: tk.Widget, on_ports_changed: Optional[Callable[[], 
             "Premier démarrage",
             "Aucun mot de passe administrateur n'est défini.\n"
             "Choisissez un mot de passe :",
-            show="•", parent=parent,
+            show="•",
+            parent=parent,
         )
         if not new:
             return
-        config_manager.set_password(new)
-        messagebox.showinfo("Mot de passe défini", "Le mot de passe administrateur a été enregistré.",
-                            parent=parent)
+
+        try:
+            config_manager.set_password(new)
+        except ValueError as exc:
+            messagebox.showerror("Erreur", str(exc), parent=parent)
+            return
+
+        messagebox.showinfo(
+            "Mot de passe défini",
+            "Le mot de passe administrateur a été enregistré.",
+            parent=parent,
+        )
 
     dialog = PasswordDialog(parent)
     if dialog.result is None:
         return
-    if not config_manager.verify_password(dialog.result):
+
+    ok, wait = config_manager.verify_password_with_wait(dialog.result)
+
+    if wait > 0:
+        messagebox.showerror(
+            "Accès temporairement verrouillé",
+            f"Trop de tentatives. Réessayez dans {wait} seconde(s).",
+            parent=parent,
+        )
+        return
+
+    if not ok:
         messagebox.showerror("Erreur", "Mot de passe incorrect.", parent=parent)
         return
 
     AdminPanel(parent, on_ports_changed=on_ports_changed)
+
